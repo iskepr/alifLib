@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+const fs = require("fs");
+const path = require("path");
+const { exec } = require("child_process");
+
+const command = process.argv[2];
+const pkgName = process.argv[3];
+
+if (["pub", "publish", "نشر"].includes(command)) {
+  pubLib();
+} else if (["get", "install", "i", "تحميل"].includes(command)) {
+  getLib();
+} else if (["version", "v", "اصدار"].includes(command)) {
+  console.log("0.1.0 اصدار مدير المكتبات");
+} else if (["update", "تحديث"].includes(command)) {
+  if (pkgName) {
+    getLib();
+  } else {
+    // تحديث لغة الف
+  }
+}
+
+// التحقق من git
+function checkGit() {
+  exec("git --version", (error, stdout, stderr) => {
+    if (error || stderr) {
+      console.log(" Git غير مثبت، جاري تثبيته...");
+
+      let installCommand = "";
+      if (process.platform === "win32") {
+        installCommand = "winget install --id Git.Git -e --source winget"; // ويندوز
+      } else if (process.platform === "darwin") {
+        installCommand = "brew install git"; // ماك
+      } else if (process.platform === "linux") {
+        exec("cat /etc/os-release", (osError, osStdout, osStderr) => {
+          if (osError || osStderr) {
+            console.error("لم يتم تحديد التوزيعة بشكل صحيح يرجي تثبيت git.");
+            process.exit(1);
+          }
+
+          if (osStdout.includes("ubuntu") || osStdout.includes("debian")) {
+            installCommand = "sudo apt install git";
+          } else if (
+            osStdout.includes("fedora") ||
+            osStdout.includes("centos")
+          ) {
+            installCommand = "sudo dnf install git";
+          }
+
+          if (installCommand) {
+            console.log(`سيتم تثبيت git باستخدام: ${installCommand}`);
+            exec(
+              installCommand,
+              (installError, installStdout, installStderr) => {
+                if (installError || installStderr) {
+                  console.error(
+                    "حدث خطأ أثناء تثبيت Git:",
+                    installError || installStderr
+                  );
+                  process.exit(1);
+                }
+                console.log("تم تثبيت Git بنجاح!");
+              }
+            );
+          }
+        });
+      }
+
+      if (installCommand) {
+        console.log(`🚀 سيتم تثبيت git باستخدام: ${installCommand}`);
+        exec(installCommand, (installError, installStdout, installStderr) => {
+          if (installError || installStderr) {
+            console.error(
+              " حدث خطأ أثناء تثبيت Git:",
+              installError || installStderr
+            );
+            process.exit(1);
+          }
+          console.log(`${installStdout} تم تثبيت Git بنجاح!`);
+        });
+      }
+    } else {
+      console.log(` Git اصدار: ${stdout}`);
+    }
+  });
+}
+
+// دالة النشر
+function pubLib() {
+  const packageDir = pkgName;
+  checkGit();
+
+  if (!packageDir) {
+    console.error("ادخل اسم المكتبة");
+    process.exit(1);
+  }
+
+  const pkgPath = path.join(process.cwd(), "مكتبة.الف");
+  if (!fs.existsSync(pkgPath)) {
+    console.error('ملف "مكتبة.الف" غير موجود في المجلد');
+    process.exit(1);
+  }
+
+  const data = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+  const requiredFields = [
+    "الاسم",
+    "اسم_المستودع",
+    "الاصدار",
+    "الوصف",
+    "الصورة",
+    "المطور",
+    "حساب_المطور",
+  ];
+  requiredFields.forEach((field) => {
+    if (!Object.keys(data).includes(field)) {
+      console.error(`الحقل "${field}" غير موجود في ملف مكتبة.الف`);
+      process.exit(1);
+    }
+  });
+  if (data["اسم_المستودع"] !== pkgName) {
+    console.error(
+      `اسم المكتبة يجب ان يكون مساوي لـ"اسم_المستودع" في ملف "مكتبة.الف"`
+    );
+    process.exit(1);
+  }
+
+  exec(
+    `
+    echo "# ${pkgName}" >> README.md &&
+    git init &&
+    git add . &&
+    git commit -m "اول اصدار" &&
+    git branch -M main &&
+    git remote add origin https://github.com/${data.حساب_المطور}/${pkgName}.git &&
+    git push -u origin main
+    `,
+    (error, stdout, stderr) => {
+      if (error || stderr) {
+        console.error(
+          "حدث خطأ أثناء إنشاء المستودع ورفع الملفات:",
+          error || stderr
+        );
+        process.exit(1);
+      }
+      console.log("تم إنشاء المستودع ورفع الملفات بنجاح!");
+    }
+  );
+}
+
+// دالة التحميل
+function getLib() {
+  async function install(pkgname) {
+    try {
+      if (!fs.existsSync(pkgname)) {
+        await new Promise((resolve, reject) => {
+          exec(`mkdir ${pkgname}`, (err, stdout, stderr) => {
+            if (err) {
+              reject(`فشل في إنشاء المجلد: ${err}`);
+            } else {
+              resolve();
+            }
+          });
+        });
+      } else {
+        console.log(`المكتبة ${pkgname} موجودة بالفعل.`);
+      }
+
+      await new Promise((resolve, reject) => {
+        exec(
+          `npx degit iskepr/${pkgname} ${pkgname}`,
+          (err, stdout, stderr) => {
+            if (err) {
+              reject(`حدث خطا: المكتبة "${pkgname}" غير موجودة`);
+            } else {
+              console.log("تم تحميل المكتبة بنجاح!");
+              resolve();
+            }
+          }
+        );
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  if (!pkgName) {
+    console.error("اكتب اسم المكتبة صح");
+  } else {
+    install(pkgName);
+  }
+}
