@@ -5,6 +5,11 @@ const { exec } = require("child_process");
 const readline = require("readline");
 const { createClient } = require("@supabase/supabase-js");
 
+const supabaseUrl = "https://gfyxjkwchsnczsmthpiw.supabase.co";
+const supabaseKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmeXhqa3djaHNuY3pzbXRocGl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQyODUyODUsImV4cCI6MjA1OTg2MTI4NX0.b40Gi7Jsk_XkJSW-W5OU8oXyQZMHLUfqVw0R09Njyj4";
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const command = process.argv[2];
 const pkgName = process.argv[3];
 
@@ -89,10 +94,9 @@ function checkGit() {
 
 // دالة النشر
 function pubLib() {
-  const packageDir = pkgName;
   checkGit();
 
-  if (!packageDir) {
+  if (!pkgName) {
     console.error("ادخل اسم المكتبة");
     process.exit(1);
   }
@@ -119,30 +123,11 @@ function pubLib() {
       process.exit(1);
     }
   });
-  // if (data["اسم_المستودع"] !== pkgName) {
-  //   console.error(
-  //     `اسم المكتبة يجب ان يكون مساوي لـ"اسم_المستودع" في ملف "مكتبة.الف"`
-  //   );
-  //   process.exit(1);
-  // }
-
-  if (!fs.existsSync(path.join(process.cwd(), ".git"))) {
-    exec(
-      `echo "# ${pkgName}" >> README.md &&
-      git init &&
-      git add . &&
-      git commit -m "اول اصدار" &&
-      git branch -M main`,
-      (error, stdout, stderr) => {
-        if (error || stderr) {
-          console.error("حدث خطأ أثناء إنشاء المستودع :", error || stderr);
-          process.exit(1);
-        }
-        console.log("تم إنشاء المستودع محليا!");
-      }
+  if (data["الاسم"].replaceAll(" ", "_") !== pkgName) {
+    console.error(
+      `اسم المكتبة "${pkgName}" لاكن بدل المسافة "_" يجب ان يكون مساوي لـ"الاسم" في ملف "مكتبة.الف"`
     );
-  } else {
-    console.log("المستودع المحلي موجود بالفعل.");
+    process.exit(1);
   }
 
   const rl = readline.createInterface({
@@ -150,29 +135,67 @@ function pubLib() {
     output: process.stdout,
   });
 
-  rl.question("هل تم إنشاء مستودع على GitHub؟ (نعم/لا): ", (answer) => {
-    if (answer === "نعم" || answer === "y") {
-      exec(
-        `git remote add origin https://github.com/${data.حساب_المطور}/${pkgName}.git &&
-        git push -u origin main`,
-        (error, stdout, stderr) => {
-          if (error || stderr) {
+  rl.question(
+    "هل تم إنشاء مستودع على GitHub ورفع الملفات؟ (نعم/لا): ",
+    (answer) => {
+      if (answer === "نعم" || answer === "y") {
+        // التحقق من وجود المستودع على GitHub
+        const repoUrl = `https://github.com/${data["حساب_المطور"]}/${data["اسم_المستودع"]}`;
+        exec(`git ls-remote ${repoUrl}`, (gitError, stdout, stderr) => {
+          if (gitError || stderr) {
             console.error(
-              "حدث خطأ أثناء إنشاء المستودع ورفع الملفات:",
-              error || stderr
+              `تعذر الوصول إلى المستودع على GitHub: ${repoUrl}. تأكد من صحة الحساب واسم المستودع.`
             );
             process.exit(1);
+          } else {
+            console.log("تم التحقق من وجود المستودع على GitHub بنجاح.");
+            // رفع الي قاعدة البيانات
+            const finalData = {
+              الاسم: data["الاسم"].replaceAll(" ", "_"),
+              اسم_المستودع: data["اسم_المستودع"],
+              الاصدار: data["الاصدار"],
+              الوصف: data["الوصف"],
+              الصورة: data["الصورة"],
+              المطور: data["المطور"],
+              حساب_المطور: data["حساب_المطور"],
+              المستودع: `https://github.com/${data["حساب_المطور"]}/${data["اسم_المستودع"]}/`,
+              التحميلات: 0,
+            };
+
+            supabase
+              .from("libraries")
+              .insert(finalData)
+              .then(({ error }) => {
+                if (error) {
+                  if (
+                    error.message.includes("duplicate key") &&
+                    error.message.includes("الاسم")
+                  ) {
+                    console.error("يوجد مكتبة بنفس الاسم");
+                  } else if (
+                    error.message.includes("duplicate key") &&
+                    error.message.includes("المستودع")
+                  ) {
+                    console.error("المستودع موجود في مكتبة اخري");
+                  } else {
+                    console.error("حدث خطا اثناء رفع المكتبة", error);
+                  }
+                  process.exit(1);
+                } else {
+                  console.log("تم رفع المكتبة بنجاح!");
+                  process.exit(0);
+                }
+              });
           }
-          console.log("تم إنشاء المستودع ورفع الملفات بنجاح!");
-        }
-      );
-    } else if (answer === "لا" || answer === "n") {
-      console.log("يرجى إنشاء مستودع على GitHub أولاً ثم إعادة المحاولة.");
-    } else {
-      console.error("رد ب نعم او لا");
+        });
+      } else if (answer === "لا" || answer === "n") {
+        console.log("يرجى إنشاء مستودع على GitHub أولاً ثم إعادة المحاولة.");
+      } else {
+        console.error("رد ب نعم او لا");
+      }
+      rl.close();
     }
-    rl.close();
-  });
+  );
 }
 
 // دالة التحميل
@@ -180,13 +203,9 @@ function getLib() {
   async function install(pkgname) {
     try {
       const appDir = path.join(__dirname, "libraries", pkgname);
+      console.log(`مكان المكتبات: ${__dirname}`);
 
       await new Promise((resolve, reject) => {
-        const supabaseUrl = "https://gfyxjkwchsnczsmthpiw.supabase.co";
-        const supabaseKey =
-          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmeXhqa3djaHNuY3pzbXRocGl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQyODUyODUsImV4cCI6MjA1OTg2MTI4NX0.b40Gi7Jsk_XkJSW-W5OU8oXyQZMHLUfqVw0R09Njyj4";
-        const supabase = createClient(supabaseUrl, supabaseKey);
-
         supabase
           .from("libraries")
           .select("*")
@@ -205,9 +224,7 @@ function getLib() {
                   ) {
                     reject(`"المكتبة "${pkgname}"  موجودة بالفعل`);
                   } else {
-                    reject(
-                      `حدث خطأ: "${err}"`
-                    );
+                    reject(`حدث خطأ: "${err}"`);
                   }
                 } else {
                   //  زيادة عدد التحميلات
