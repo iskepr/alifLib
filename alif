@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
 const readline = require("readline");
+const { createClient } = require("@supabase/supabase-js");
 
 const command = process.argv[2];
 const pkgName = process.argv[3];
@@ -178,31 +179,57 @@ function pubLib() {
 function getLib() {
   async function install(pkgname) {
     try {
-      const appDir = path.join(process.cwd(), "libraries", pkgname);
-
-      if (!fs.existsSync(appDir)) {
-        await new Promise((resolve, reject) => {
-          fs.mkdir(appDir, { recursive: true }, (err) => {
-            if (err) {
-              reject(`فشل في إنشاء المجلد: ${err}`);
-            } else {
-              resolve();
-            }
-          });
-        });
-      } else {
-        console.log(`المكتبة ${pkgname} موجودة بالفعل.`);
-      }
+      const appDir = path.join(__dirname, "libraries", pkgname);
 
       await new Promise((resolve, reject) => {
-        exec(`npx degit iskepr/${pkgname} ${appDir}`, (err, stdout, stderr) => {
-          if (err) {
-            reject(`حدث خطا: المكتبة "${pkgname}" غير موجودة`);
-          } else {
-            console.log("تم تحميل المكتبة بنجاح!");
-            resolve();
-          }
-        });
+        const supabaseUrl = "https://gfyxjkwchsnczsmthpiw.supabase.co";
+        const supabaseKey =
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmeXhqa3djaHNuY3pzbXRocGl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQyODUyODUsImV4cCI6MjA1OTg2MTI4NX0.b40Gi7Jsk_XkJSW-W5OU8oXyQZMHLUfqVw0R09Njyj4";
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        supabase
+          .from("libraries")
+          .select("*")
+          .eq("الاسم", pkgname)
+          .then(({ data, error }) => {
+            if (error || !data || data.length === 0) {
+              reject(`حدث خطأ: لم يتم العثور على المكتبة "${pkgname}"`);
+            } else {
+              const developer = data[0].حساب_المطور;
+              const repoName = data[0].اسم_المستودع;
+              // تحميل المكتبة من الجيت هاب
+              exec(`npx degit ${developer}/${repoName} ${appDir}`, (err) => {
+                if (err) {
+                  if (
+                    String(err).includes("destination directory is not empty")
+                  ) {
+                    reject(`"المكتبة "${pkgname}"  موجودة بالفعل`);
+                  } else {
+                    reject(
+                      `حدث خطأ: "${err}"`
+                    );
+                  }
+                } else {
+                  //  زيادة عدد التحميلات
+                  const downloads = data[0].التحميلات + 1;
+                  supabase
+                    .from("libraries")
+                    .update({ التحميلات: downloads })
+                    .eq("الاسم", pkgname)
+                    .then(({ error }) => {
+                      if (error) {
+                        console.error(
+                          "حدث خطأ أثناء تحديث عدد التحميلات:",
+                          error
+                        );
+                      }
+                    });
+                  console.log("تم تحميل المكتبة بنجاح!");
+                  resolve();
+                }
+              });
+            }
+          });
       });
     } catch (error) {
       console.error(error);

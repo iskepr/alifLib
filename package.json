@@ -27,6 +27,6 @@
   "author": "skepr",
   "license": "ISC",
   "dependencies": {
-    "progress": "^2.0.3"
+    "@supabase/supabase-js": "^2.39.0"
   }
 }
