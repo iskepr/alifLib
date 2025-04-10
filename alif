@@ -2,6 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
+const readline = require("readline");
 
 const command = process.argv[2];
 const pkgName = process.argv[3];
@@ -80,7 +81,7 @@ function checkGit() {
         });
       }
     } else {
-      console.log(` Git اصدار: ${stdout}`);
+      // console.log(` Git اصدار: ${stdout}`);
     }
   });
 }
@@ -117,43 +118,71 @@ function pubLib() {
       process.exit(1);
     }
   });
-  if (data["اسم_المستودع"] !== pkgName) {
-    console.error(
-      `اسم المكتبة يجب ان يكون مساوي لـ"اسم_المستودع" في ملف "مكتبة.الف"`
+  // if (data["اسم_المستودع"] !== pkgName) {
+  //   console.error(
+  //     `اسم المكتبة يجب ان يكون مساوي لـ"اسم_المستودع" في ملف "مكتبة.الف"`
+  //   );
+  //   process.exit(1);
+  // }
+
+  if (!fs.existsSync(path.join(process.cwd(), ".git"))) {
+    exec(
+      `echo "# ${pkgName}" >> README.md &&
+      git init &&
+      git add . &&
+      git commit -m "اول اصدار" &&
+      git branch -M main`,
+      (error, stdout, stderr) => {
+        if (error || stderr) {
+          console.error("حدث خطأ أثناء إنشاء المستودع :", error || stderr);
+          process.exit(1);
+        }
+        console.log("تم إنشاء المستودع محليا!");
+      }
     );
-    process.exit(1);
+  } else {
+    console.log("المستودع المحلي موجود بالفعل.");
   }
 
-  exec(
-    `
-    echo "# ${pkgName}" >> README.md &&
-    git init &&
-    git add . &&
-    git commit -m "اول اصدار" &&
-    git branch -M main &&
-    git remote add origin https://github.com/${data.حساب_المطور}/${pkgName}.git &&
-    git push -u origin main
-    `,
-    (error, stdout, stderr) => {
-      if (error || stderr) {
-        console.error(
-          "حدث خطأ أثناء إنشاء المستودع ورفع الملفات:",
-          error || stderr
-        );
-        process.exit(1);
-      }
-      console.log("تم إنشاء المستودع ورفع الملفات بنجاح!");
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  rl.question("هل تم إنشاء مستودع على GitHub؟ (نعم/لا): ", (answer) => {
+    if (answer === "نعم" || answer === "y") {
+      exec(
+        `git remote add origin https://github.com/${data.حساب_المطور}/${pkgName}.git &&
+        git push -u origin main`,
+        (error, stdout, stderr) => {
+          if (error || stderr) {
+            console.error(
+              "حدث خطأ أثناء إنشاء المستودع ورفع الملفات:",
+              error || stderr
+            );
+            process.exit(1);
+          }
+          console.log("تم إنشاء المستودع ورفع الملفات بنجاح!");
+        }
+      );
+    } else if (answer === "لا" || answer === "n") {
+      console.log("يرجى إنشاء مستودع على GitHub أولاً ثم إعادة المحاولة.");
+    } else {
+      console.error("رد ب نعم او لا");
     }
-  );
+    rl.close();
+  });
 }
 
 // دالة التحميل
 function getLib() {
   async function install(pkgname) {
     try {
-      if (!fs.existsSync(pkgname)) {
+      const appDir = path.join(process.cwd(), "libraries", pkgname);
+
+      if (!fs.existsSync(appDir)) {
         await new Promise((resolve, reject) => {
-          exec(`mkdir ${pkgname}`, (err, stdout, stderr) => {
+          fs.mkdir(appDir, { recursive: true }, (err) => {
             if (err) {
               reject(`فشل في إنشاء المجلد: ${err}`);
             } else {
@@ -166,17 +195,14 @@ function getLib() {
       }
 
       await new Promise((resolve, reject) => {
-        exec(
-          `npx degit iskepr/${pkgname} ${pkgname}`,
-          (err, stdout, stderr) => {
-            if (err) {
-              reject(`حدث خطا: المكتبة "${pkgname}" غير موجودة`);
-            } else {
-              console.log("تم تحميل المكتبة بنجاح!");
-              resolve();
-            }
+        exec(`npx degit iskepr/${pkgname} ${appDir}`, (err, stdout, stderr) => {
+          if (err) {
+            reject(`حدث خطا: المكتبة "${pkgname}" غير موجودة`);
+          } else {
+            console.log("تم تحميل المكتبة بنجاح!");
+            resolve();
           }
-        );
+        });
       });
     } catch (error) {
       console.error(error);
