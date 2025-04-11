@@ -13,6 +13,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const command = process.argv[2];
 const pkgName = process.argv[3];
 
+const isPkg = typeof process.pkg !== "undefined";
+let alifDir = isPkg ? path.dirname(process.execPath) : __dirname;
+
 if (["pub", "publish", "نشر"].includes(command)) {
   pubLib();
 } else if (["get", "install", "i", "تحميل"].includes(command)) {
@@ -23,7 +26,7 @@ if (["pub", "publish", "نشر"].includes(command)) {
   if (pkgName) {
     getLib();
   } else {
-    // تحديث لغة الف
+    alifUpdate();
   }
 }
 
@@ -202,8 +205,8 @@ function pubLib() {
 function getLib() {
   async function install(pkgname) {
     try {
-      const appDir = path.join(__dirname, "libraries", pkgname);
-      console.log(`مكان المكتبات: ${__dirname}`);
+      const appDir = path.join(alifDir, "libraries", pkgname);
+      console.log(`مكان المكتبات: ${alifDir}`);
 
       await new Promise((resolve, reject) => {
         supabase
@@ -258,4 +261,43 @@ function getLib() {
   } else {
     install(pkgName);
   }
+}
+
+// تحديث اللغة
+function alifUpdate() {
+  let appName =
+    process.platform === "win32"
+      ? "alif.exe"
+      : process.platform === "darwin"
+      ? "alif.app"
+      : "alif.appimage";
+  let lastVer = "";
+  fetch("https://api.github.com/repos/alifcommunity/Alif/releases/latest")
+    .then((response) => response.json())
+    .then((data) => {
+      if (data && data.tag_name) {
+        lastVer = data.tag_name;
+        exec(
+          `curl -L -o ${path.join(
+            alifDir,
+            appName
+          )} --create-dirs -z ${path.join(
+            alifDir,
+            appName
+          )} https://github.com/alifcommunity/Alif/releases/download/${lastVer}/${appName}`,
+          (error) => {
+            if (error) {
+              console.error("حدث خطأ أثناء تحديث اللغة:", error);
+              return;
+            }
+            console.log("تم تحديث لغة الف بنجاح!");
+          }
+        );
+      } else {
+        console.error("حدث خطا: الملف غير موجود");
+      }
+    })
+    .catch((error) => {
+      console.error("حدث خطا: الملف غير موجود", error);
+    });
 }
