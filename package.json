@@ -17,9 +17,9 @@
       "alif"
     ],
     "targets": [
-      "node18-linux-x64",
-      "node18-win-x64",
-      "node18-macos-x64"
+      "node14-linux-x64",
+      "node14-win-x64",
+      "node14-macos-x64"
     ],
     "exclude": [
       "libraries/**"
@@ -30,6 +30,8 @@
   "author": "skepr",
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "fetch": "^1.1.0",
+    "node-fetch": "^2.7.0"
   }
 }

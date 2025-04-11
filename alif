@@ -4,6 +4,7 @@ const path = require("path");
 const { exec } = require("child_process");
 const readline = require("readline");
 const { createClient } = require("@supabase/supabase-js");
+const fetch = require("node-fetch");
 
 const supabaseUrl = "https://gfyxjkwchsnczsmthpiw.supabase.co";
 const supabaseKey =
@@ -206,7 +207,7 @@ function getLib() {
   async function install(pkgname) {
     try {
       const appDir = path.join(alifDir, "libraries", pkgname);
-      console.log(`مكان المكتبات: ${alifDir}`);
+      // console.log(`مكان المكتبات: ${alifDir}`);
 
       await new Promise((resolve, reject) => {
         supabase
