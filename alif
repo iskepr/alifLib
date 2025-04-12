@@ -25,75 +25,10 @@ if (["pub", "publish", "نشر"].includes(command)) {
   console.log("0.1.0 اصدار مدير المكتبات");
 } else if (["update", "تحديث"].includes(command)) {
   if (pkgName) {
-    getLib();
+    updateLib();
   } else {
     alifUpdate();
   }
-}
-
-// التحقق من git
-function checkGit() {
-  exec("git --version", (error, stdout, stderr) => {
-    if (error || stderr) {
-      console.log(" Git غير مثبت، جاري تثبيته...");
-
-      let installCommand = "";
-      if (process.platform === "win32") {
-        installCommand = "winget install --id Git.Git -e --source winget"; // ويندوز
-      } else if (process.platform === "darwin") {
-        installCommand = "brew install git"; // ماك
-      } else if (process.platform === "linux") {
-        exec("cat /etc/os-release", (osError, osStdout, osStderr) => {
-          if (osError || osStderr) {
-            console.error("لم يتم تحديد التوزيعة بشكل صحيح يرجي تثبيت git.");
-            process.exit(1);
-          }
-
-          if (osStdout.includes("ubuntu") || osStdout.includes("debian")) {
-            installCommand = "sudo apt install git";
-          } else if (
-            osStdout.includes("fedora") ||
-            osStdout.includes("centos")
-          ) {
-            installCommand = "sudo dnf install git";
-          }
-
-          if (installCommand) {
-            console.log(`سيتم تثبيت git باستخدام: ${installCommand}`);
-            exec(
-              installCommand,
-              (installError, installStdout, installStderr) => {
-                if (installError || installStderr) {
-                  console.error(
-                    "حدث خطأ أثناء تثبيت Git:",
-                    installError || installStderr
-                  );
-                  process.exit(1);
-                }
-                console.log("تم تثبيت Git بنجاح!");
-              }
-            );
-          }
-        });
-      }
-
-      if (installCommand) {
-        console.log(`🚀 سيتم تثبيت git باستخدام: ${installCommand}`);
-        exec(installCommand, (installError, installStdout, installStderr) => {
-          if (installError || installStderr) {
-            console.error(
-              " حدث خطأ أثناء تثبيت Git:",
-              installError || installStderr
-            );
-            process.exit(1);
-          }
-          console.log(`${installStdout} تم تثبيت Git بنجاح!`);
-        });
-      }
-    } else {
-      // console.log(` Git اصدار: ${stdout}`);
-    }
-  });
 }
 
 // دالة النشر
@@ -206,7 +141,7 @@ function pubLib() {
 function getLib() {
   async function install(pkgname) {
     try {
-      const appDir = path.join(alifDir, "libraries", pkgname);
+      const libDir = path.join(alifDir, "libraries", pkgname);
       // console.log(`مكان المكتبات: ${alifDir}`);
 
       await new Promise((resolve, reject) => {
@@ -221,7 +156,7 @@ function getLib() {
               const developer = data[0].حساب_المطور;
               const repoName = data[0].اسم_المستودع;
               // تحميل المكتبة من الجيت هاب
-              exec(`npx degit ${developer}/${repoName} ${appDir}`, (err) => {
+              exec(`npx degit ${developer}/${repoName} ${libDir}`, (err) => {
                 if (err) {
                   if (
                     String(err).includes("destination directory is not empty")
@@ -263,6 +198,75 @@ function getLib() {
     install(pkgName);
   }
 }
+// دالة تحديث المكتبة
+function updateLib() {
+  async function reinstall(pkgname) {
+    try {
+      const libDir = path.join(alifDir, "libraries", pkgname);
+
+      if (!fs.existsSync(libDir)) {
+        console.error(
+          `المكتبة غير موجودة حملها بكتابة "alif install ${pkgName}"`
+        );
+        process.exit(1);
+      }
+
+      const libFile = path.join(libDir, "مكتبة.الف");
+      let localVersion = null;
+
+      if (fs.existsSync(libFile)) {
+        const fileContent = JSON.parse(fs.readFileSync(libFile, "utf8"));
+        if (fileContent && fileContent["الاصدار"]) {
+          localVersion = fileContent["الاصدار"];
+        }
+      }
+
+      await new Promise((resolve, reject) => {
+        supabase
+          .from("libraries")
+          .select("*")
+          .eq("الاسم", pkgname)
+          .then(({ data, error }) => {
+            if (error || !data || data.length === 0) {
+              reject(`حدث خطأ: لم يتم العثور على المكتبة "${pkgname}"`);
+            } else {
+              const developer = data[0].حساب_المطور;
+              const repoName = data[0].اسم_المستودع;
+              const pubLibVer = data[0].الاصدار;
+              if (pubLibVer > localVersion) {
+                fs.rmSync(libDir, { recursive: true, force: true });
+                // تحميل المكتبة من الجيت هاب
+                exec(`npx degit ${developer}/${repoName} ${libDir}`, (err) => {
+                  if (err) {
+                    if (
+                      String(err).includes("destination directory is not empty")
+                    ) {
+                      reject(`المكتبة "${pkgname}" موجودة بالفعل`);
+                    } else {
+                      reject(`حدث خطأ: "${err}"`);
+                    }
+                  } else {
+                    console.log("تم تحديث المكتبة بنجاح!");
+                    resolve();
+                  }
+                });
+              } else {
+                console.error("لا يوجد تحديث متوفر");
+              }
+            }
+          });
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  if (!pkgName) {
+    console.error("اكتب اسم المكتبة صح");
+  } else {
+    reinstall(pkgName);
+  }
+}
 
 // تحديث اللغة
 function alifUpdate() {
@@ -301,4 +305,69 @@ function alifUpdate() {
     .catch((error) => {
       console.error("حدث خطا: الملف غير موجود", error);
     });
+}
+
+// التحقق من git
+function checkGit() {
+  exec("git --version", (error, stdout, stderr) => {
+    if (error || stderr) {
+      console.log(" Git غير مثبت، جاري تثبيته...");
+
+      let installCommand = "";
+      if (process.platform === "win32") {
+        installCommand = "winget install --id Git.Git -e --source winget"; // ويندوز
+      } else if (process.platform === "darwin") {
+        installCommand = "brew install git"; // ماك
+      } else if (process.platform === "linux") {
+        exec("cat /etc/os-release", (osError, osStdout, osStderr) => {
+          if (osError || osStderr) {
+            console.error("لم يتم تحديد التوزيعة بشكل صحيح يرجي تثبيت git.");
+            process.exit(1);
+          }
+
+          if (osStdout.includes("ubuntu") || osStdout.includes("debian")) {
+            installCommand = "sudo apt install git";
+          } else if (
+            osStdout.includes("fedora") ||
+            osStdout.includes("centos")
+          ) {
+            installCommand = "sudo dnf install git";
+          }
+
+          if (installCommand) {
+            console.log(`سيتم تثبيت git باستخدام: ${installCommand}`);
+            exec(
+              installCommand,
+              (installError, installStdout, installStderr) => {
+                if (installError || installStderr) {
+                  console.error(
+                    "حدث خطأ أثناء تثبيت Git:",
+                    installError || installStderr
+                  );
+                  process.exit(1);
+                }
+                console.log("تم تثبيت Git بنجاح!");
+              }
+            );
+          }
+        });
+      }
+
+      if (installCommand) {
+        console.log(`🚀 سيتم تثبيت git باستخدام: ${installCommand}`);
+        exec(installCommand, (installError, installStdout, installStderr) => {
+          if (installError || installStderr) {
+            console.error(
+              " حدث خطأ أثناء تثبيت Git:",
+              installError || installStderr
+            );
+            process.exit(1);
+          }
+          console.log(`${installStdout} تم تثبيت Git بنجاح!`);
+        });
+      }
+    } else {
+      // console.log(` Git اصدار: ${stdout}`);
+    }
+  });
 }
