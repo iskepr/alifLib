@@ -21,13 +21,14 @@ if (["pub", "publish", "نشر"].includes(command)) {
   pubLib();
 } else if (["get", "install", "i", "تحميل"].includes(command)) {
   getLib();
-} else if (["version", "v", "اصدار"].includes(command)) {
+} else if (["version", "-v", "اصدار"].includes(command)) {
   console.log("0.1.0 اصدار مدير المكتبات");
 } else if (["update", "تحديث"].includes(command)) {
   if (pkgName) {
     updateLib();
   } else {
-    alifUpdate();
+    alifUpdate(false);
+    alifUpdate(true);
   }
 }
 
@@ -269,41 +270,81 @@ function updateLib() {
 }
 
 // تحديث اللغة
-function alifUpdate() {
-  let appName =
+function alifUpdate(isLib = false) {
+  const نوع_التطبيق = isLib ? "aliflib" : "alif";
+  const اسم_التطبيق =
     process.platform === "win32"
-      ? "alif.exe"
+      ? `${نوع_التطبيق}.exe`
       : process.platform === "darwin"
-      ? "alif.app"
-      : "alif.appimage";
-  let lastVer = "";
-  fetch("https://api.github.com/repos/alifcommunity/Alif/releases/latest")
+      ? `${نوع_التطبيق}-mac`
+      : `${نوع_التطبيق}-linux`;
+
+  const المستودع = isLib ? "iskepr/AlifLib" : "alifcommunity/Alif";
+  const التطبيق_المحلي = path.join(alifDir, نوع_التطبيق);
+
+  fetch(`https://api.github.com/repos/${المستودع}/releases/latest`)
     .then((response) => response.json())
     .then((data) => {
-      if (data && data.tag_name) {
-        lastVer = data.tag_name;
+      if (!data || !data.tag_name) {
+        console.error(`حدث خطأ: لا يوجد إصدار متوفر`);
+        return;
+      }
+
+      const احدث_الإصدار = data.tag_name;
+
+      // جرب تشغيل الأمر للحصول على الإصدار الحالي
+      exec(`${التطبيق_المحلي} -v`, (err, stdout) => {
+        const الإصدار_الحالي = err
+        ? "0.0.0"
+        : (stdout.match(/\d+\.\d+\.\d+/) || ["0.0.0"])[0];
+
+        if (الإصدار_الحالي === احدث_الإصدار) {
+          console.log(`${نوع_التطبيق} بالفعل على أحدث إصدار (${احدث_الإصدار})`);
+          return;
+        }
+
+        console.log(`جارِ التحديث من ${الإصدار_الحالي} إلى ${احدث_الإصدار}...`);
+
         exec(
-          `curl -L -o ${path.join(
+          `curl -L -o ${path.join(alifDir, اسم_التطبيق)} --create-dirs -z ${path.join(
             alifDir,
-            appName
-          )} --create-dirs -z ${path.join(
-            alifDir,
-            appName
-          )} https://github.com/alifcommunity/Alif/releases/download/${lastVer}/${appName}`,
+            اسم_التطبيق
+          )} https://github.com/${المستودع}/releases/download/${احدث_الإصدار}/${اسم_التطبيق}`,
           (error) => {
             if (error) {
-              console.error("حدث خطأ أثناء تحديث اللغة:", error);
+              console.error(`حدث خطأ أثناء التحديث:`, error);
               return;
             }
-            console.log("تم تحديث لغة الف بنجاح!");
-          }
-        );
-      } else {
-        console.error("حدث خطا: الملف غير موجود");
-      }
+
+            const الاسم_القديم = path.join(alifDir, اسم_التطبيق);
+            const الاسم_الجديد = path.join(alifDir, نوع_التطبيق);
+
+            // حذف الملف القديم إذا كان موجوداً
+            fs.unlink(الاسم_الجديد, (deleteError) => {
+              if (deleteError && deleteError.code !== 'ENOENT') {
+                console.error(`خطأ أثناء حذف الملف القديم:`, deleteError);
+                return;
+              }
+              // إعادة التسمية بعد الحذف
+              fs.rename(الاسم_القديم, الاسم_الجديد, (renameError) => {
+                if (renameError) {
+                  console.error(`خطأ أثناء إعادة التسمية:`, renameError);
+                  return;
+                }
+              fs.chmod(الاسم_الجديد, 0o755, (chmodError) => {
+                if (chmodError) {
+                  console.error(`خطأ في إضافة الصلاحيات:`, chmodError);
+                  return;
+                }
+                console.log(`تم تحديث ${نوع_التطبيق} إلى الإصدار ${احدث_الإصدار} بنجاح!`);
+              });
+            });
+          });
+        });
+      });
     })
     .catch((error) => {
-      console.error("حدث خطا: الملف غير موجود", error);
+      console.error(`فشل جلب الإصدار الأخير من ${المستودع}:`, error);
     });
 }
 
